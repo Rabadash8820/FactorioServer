@@ -1,0 +1,382 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: A new Factorio server in its own public subnet, automatically updated.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Subnet Configuration
+        Parameters:
+        - NetworkStackName
+        - SecurityStackName
+        - AzName
+        - SubnetCidrBlock
+      - Label:
+          default: Factorio Server Instance Configuration
+        Parameters:
+        - InstanceType
+        - ImageId
+        - VolumeSize
+      - Label:
+          default: Factorio Server Software Configuration
+        Parameters:
+        - FactorioVersion
+        - KeyPair
+        - TimeZone
+        - CfnCheckFrequency
+        - YumUpdateEmail
+
+Parameters:
+  NetworkStackName:
+    Type: String
+    Default: MainVPC
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Description: Name of an active CloudFormation stack that contains the networking resources needed to create a Factorio server in its own public subnet.
+    ConstraintDescription: must contain only alphanumeric characters and/or hyphens, and start with a letter
+  SecurityStackName:
+    Type: String
+    Default: factorio-server-security
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Description: Name of an active CloudFormation stack that contains the security group and network ACL rules for a Factorio server.
+    ConstraintDescription: must contain only alphanumeric characters and/or hyphens, and start with a letter
+  AzName:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: The Availability Zone in which to create a public subnet for the new Factorio server.
+  SubnetCidrBlock:
+    Type: String
+    Default: 10.0.128.0/28
+    AllowedPattern: ^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}(\/\d{1,2})?$
+    Description: The CIDR block for the new public subnet in the provided Availability Zone.  Block size must be between a /16 netmask and a /28 netmask.
+    ConstraintDescription: must be a valid CIDR block (e.g., 10.20.114.0/24)
+
+  InstanceType:
+    Type: String
+    Default: m5.large
+    AllowedValues: [  # Latest list of instance types always available here: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html#cfn-ec2-instance-instancetype
+      a1.2xlarge, a1.4xlarge, a1.large, a1.medium, a1.xlarge,
+      c1.medium, c1.xlarge, c3.2xlarge, c3.4xlarge, c3.8xlarge, c3.large, c3.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c4.large, c4.xlarge, c5.12xlarge, c5.18xlarge, c5.24xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.large, c5.metal, c5.xlarge, c5d.18xlarge, c5d.2xlarge, c5d.4xlarge, c5d.9xlarge, c5d.large, c5d.xlarge, c5n.18xlarge, c5n.2xlarge, c5n.4xlarge, c5n.9xlarge, c5n.large, c5n.xlarge, cc1.4xlarge, cc2.8xlarge, cg1.4xlarge, cr1.8xlarge,
+      d2.2xlarge, d2.4xlarge, d2.8xlarge, d2.xlarge,
+      f1.16xlarge, f1.2xlarge, f1.4xlarge,
+      g2.2xlarge, g2.8xlarge, g3.16xlarge, g3.4xlarge, g3.8xlarge, g3s.xlarge,
+      h1.16xlarge, h1.2xlarge, h1.4xlarge, h1.8xlarge, hi1.4xlarge, hs1.8xlarge,
+      i2.2xlarge, i2.4xlarge, i2.8xlarge, i2.xlarge, i3.16xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge, i3.large, i3.metal, i3.xlarge, i3en.12xlarge, i3en.24xlarge, i3en.2xlarge, i3en.3xlarge, i3en.6xlarge, i3en.large, i3en.xlarge,
+      m1.large, m1.medium, m1.small, m1.xlarge, m2.2xlarge, m2.4xlarge, m2.xlarge, m3.2xlarge, m3.large, m3.medium, m3.xlarge, m4.10xlarge, m4.16xlarge, m4.2xlarge, m4.4xlarge, m4.large, m4.xlarge, m5.12xlarge, m5.16xlarge, m5.24xlarge, m5.2xlarge, m5.4xlarge, m5.8xlarge, m5.large, m5.metal, m5.xlarge, m5a.12xlarge, m5a.16xlarge, m5a.24xlarge, m5a.2xlarge, m5a.4xlarge, m5a.8xlarge, m5a.large, m5a.xlarge, m5ad.12xlarge, m5ad.16xlarge, m5ad.24xlarge, m5ad.2xlarge, m5ad.4xlarge, m5ad.8xlarge, m5ad.large, m5ad.xlarge, m5d.12xlarge, m5d.16xlarge, m5d.24xlarge, m5d.2xlarge, m5d.4xlarge, m5d.8xlarge, m5d.large, m5d.metal, m5d.xlarge,
+      p2.16xlarge, p2.8xlarge, p2.xlarge, p3.16xlarge, p3.2xlarge, p3.8xlarge, p3dn.24xlarge,
+      r3.2xlarge, r3.4xlarge, r3.8xlarge, r3.large, r3.xlarge, r4.16xlarge, r4.2xlarge, r4.4xlarge, r4.8xlarge, r4.large, r4.xlarge, r5.12xlarge, r5.16xlarge, r5.24xlarge, r5.2xlarge, r5.4xlarge, r5.8xlarge, r5.large, r5.metal, r5.xlarge, r5a.12xlarge, r5a.16xlarge, r5a.24xlarge, r5a.2xlarge, r5a.4xlarge, r5a.8xlarge, r5a.large, r5a.xlarge, r5ad.12xlarge, r5ad.16xlarge, r5ad.24xlarge, r5ad.2xlarge, r5ad.4xlarge, r5ad.8xlarge, r5ad.large, r5ad.xlarge, r5d.12xlarge, r5d.16xlarge, r5d.24xlarge, r5d.2xlarge, r5d.4xlarge, r5d.8xlarge, r5d.large, r5d.metal, r5d.xlarge,
+      t1.micro, t2.2xlarge, t2.large, t2.medium, t2.micro, t2.nano, t2.small, t2.xlarge, t3.2xlarge, t3.large, t3.medium, t3.micro, t3.nano, t3.small, t3.xlarge, t3a.2xlarge, t3a.large, t3a.medium, t3a.micro, t3a.nano, t3a.small, t3a.xlarge,
+      u-12tb1.metal, u-6tb1.metal, u-9tb1.metal,
+      x1.16xlarge, x1.32xlarge, x1e.16xlarge, x1e.2xlarge, x1e.32xlarge, x1e.4xlarge, x1e.8xlarge, x1e.xlarge,
+      z1d.12xlarge, z1d.2xlarge, z1d.3xlarge, z1d.6xlarge, z1d.large, z1d.metal, z1d.xlarge
+    ]
+    Description: The EC2 instance type of the Factorio server. Should probably be the latest generation of general-purpose instance type (M-series or T-series). Start small until you need a bigger instance type!
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0d8f6eb4f641ef691
+    Description: The ID of the Factorio Server's AMI. Should be an EBS-optimized, Amazon Linux-based AMI for the current region. Default is 64-bit Amazon Linux 2 for us-east-2 (Ohio) region.
+  VolumeSize:
+    Type: Number
+    Default: 8
+    MinValue: 4
+    MaxValue: 16384
+    Description: The size of the server's attached EBS volume, in GiBs.
+    ConstraintDescription: must be an integer between 4 and 16384 (inclusive) # constraints from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-ebs-volume.html#cfn-ec2-ebs-volume-size
+
+  FactorioVersion:
+    Type: String
+    Default: stable
+    AllowedValues: [  # See https://wiki.factorio.com/Version_history
+      latest, stable,
+      "0.1.0", "0.1.1", "0.1.2",
+      "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "0.2.7", "0.2.8", "0.2.9", "0.2.10",
+      "0.3.0", "0.3.1", "0.3.2",
+      "0.4.0", "0.4.1",
+      "0.5.0", "0.5.1", "0.5.2", "0.5.3",
+      "0.6.0", "0.6.1", "0.6.2", "0.6.3", "0.6.4",
+      "0.7.0", "0.7.1", "0.7.2", "0.7.3", "0.7.4", "0.7.5",
+      "0.8.0", "0.8.1", "0.8.2", "0.8.3", "0.8.4", "0.8.5", "0.8.6", "0.8.7", "0.8.8",
+      "0.9.0", "0.9.1", "0.9.2", "0.9.3", "0.9.4", "0.9.5", "0.9.6", "0.9.7", "0.9.8",
+      "0.10.0", "0.10.1", "0.10.2", "0.10.3", "0.10.4", "0.10.5", "0.10.6", "0.10.7", "0.10.8", "0.10.9", "0.10.10", "0.10.11", "0.10.12",
+      "0.11.0", "0.11.1", "0.11.2", "0.11.3", "0.11.4", "0.11.5", "0.11.6", "0.11.7", "0.11.8", "0.11.9", "0.11.10", "0.11.11", "0.11.12", "0.11.13", "0.11.14", "0.11.15", "0.11.16", "0.11.17", "0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22",
+      "0.12.0", "0.12.1", "0.12.2", "0.12.3", "0.12.4", "0.12.5", "0.12.6", "0.12.7", "0.12.8", "0.12.9", "0.12.10", "0.12.11", "0.12.12", "0.12.13", "0.12.14", "0.12.15", "0.12.16", "0.12.17", "0.12.18", "0.12.19", "0.12.20", "0.12.21", "0.12.22", "0.12.23", "0.12.24", "0.12.25", "0.12.26", "0.12.27", "0.12.28", "0.12.29", "0.12.30", "0.12.31", "0.12.32", "0.12.33", "0.12.34", "0.12.35",
+      "0.13.0", "0.13.1", "0.13.2", "0.13.3", "0.13.4", "0.13.5", "0.13.6", "0.13.7", "0.13.8", "0.13.9", "0.13.10", "0.13.11", "0.13.12", "0.13.13", "0.13.14", "0.13.15", "0.13.16", "0.13.17", "0.13.18", "0.13.19", "0.13.20",
+      "0.14.0", "0.14.1", "0.14.2", "0.14.3", "0.14.4", "0.14.5", "0.14.6", "0.14.7", "0.14.8", "0.14.9", "0.14.10", "0.14.11", "0.14.12", "0.14.13", "0.14.14", "0.14.15", "0.14.16", "0.14.17", "0.14.18", "0.14.19", "0.14.20", "0.14.21", "0.14.22", "0.14.23",
+      "0.15.0", "0.15.1", "0.15.2", "0.15.3", "0.15.4", "0.15.5", "0.15.6", "0.15.7", "0.15.8", "0.15.9", "0.15.10", "0.15.11", "0.15.12", "0.15.13", "0.15.14", "0.15.15", "0.15.16", "0.15.17", "0.15.18", "0.15.19", "0.15.20", "0.15.21", "0.15.22", "0.15.23", "0.15.24", "0.15.25", "0.15.26", "0.15.27", "0.15.28", "0.15.29", "0.15.30", "0.15.31", "0.15.32", "0.15.33", "0.15.34", "0.15.35", "0.15.36", "0.15.37", "0.15.38", "0.15.39", "0.15.40",
+      "0.16.0", "0.16.1", "0.16.2", "0.16.3", "0.16.4", "0.16.5", "0.16.6", "0.16.7", "0.16.8", "0.16.9", "0.16.10", "0.16.11", "0.16.12", "0.16.13", "0.16.14", "0.16.15", "0.16.16", "0.16.17", "0.16.18", "0.16.19", "0.16.20", "0.16.21", "0.16.22", "0.16.23", "0.16.24", "0.16.25", "0.16.26", "0.16.27", "0.16.28", "0.16.29", "0.16.30", "0.16.31", "0.16.32", "0.16.33", "0.16.34", "0.16.35", "0.16.36", "0.16.37", "0.16.38", "0.16.39", "0.16.40", "0.16.41", "0.16.42", "0.16.43", "0.16.44", "0.16.45", "0.16.46", "0.16.47", "0.16.48", "0.16.49", "0.16.50", "0.16.51",
+      "0.17.0", "0.17.1", "0.17.2", "0.17.3", "0.17.4", "0.17.5", "0.17.6", "0.17.7", "0.17.8", "0.17.9", "0.17.10", "0.17.11", "0.17.12", "0.17.13", "0.17.14", "0.17.15", "0.17.16", "0.17.17", "0.17.18", "0.17.19", "0.17.20", "0.17.21", "0.17.22", "0.17.23", "0.17.24", "0.17.25", "0.17.26", "0.17.27", "0.17.28", "0.17.29", "0.17.30", "0.17.31", "0.17.32", "0.17.33", "0.17.34", "0.17.35", "0.17.36", "0.17.37", "0.17.38", "0.17.39", "0.17.40", "0.17.41", "0.17.42", "0.17.43", "0.17.44", "0.17.45", "0.17.46", "0.17.47", "0.17.48", "0.17.49", "0.17.50", "0.17.51", "0.17.52", "0.17.53", "0.17.54", "0.17.55", "0.17.56", "0.17.57", "0.17.58", "0.17.59", "0.17.60", "0.17.61", "0.17.62", "0.17.63", "0.17.64", "0.17.65", "0.17.66"
+    ]
+    Description: Which version of Factorio to install on the server. 'stable' represents the latest stable release. 'latest' represents the latest experimental release.
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The EC2 key pair needed to connect to the new Factorio server.
+  TimeZone:
+    Type: String
+    Default: UTC
+    Description: Name of a time zone data file in /usr/share/zoneinfo (for example "America/New_York").  Used to set the time zone for the Factorio servers.
+  CfnCheckFrequency:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    MaxValue: 720 # 12 hours, from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-creationpolicy.html#cfn-attributes-creationpolicy-resourcesignal-timeout
+    Description: The frequency, in minutes, with which the cfn-hup script will check for updates to this CloudFormation template.
+    ConstraintDescription: must be between 1 and 720 minutes (12 hours), inclusive
+  YumUpdateEmail:
+    Type: String
+    Default: admin@mycompany.com
+    MaxLength: 255
+    AllowedPattern: ^([0-9A-Za-z]+[._-]?)+[0-9A-Za-z]+@([0-9A-Za-z]+[._-]?)+\.[0-9A-Za-z]+$
+    ConstraintDescription: must be a valid Email address, like "frodo@theshire.com".
+    Description: Email to which notifications from automatic yum updates will be sent.  These notifications will only indicate that updates have been downloaded; the updates will still have to be installed manually.
+  ScriptRepoUrl:
+    Type: String
+    Default: "https://raw.githubusercontent.com/Rabadash8820/FactorioServer/<CommitSha>"
+    MaxLength: 255
+    Description: "the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<commit>)"
+    ConstraintDescription: " must be the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<commit>)"
+
+Mappings:
+  FactorioConfig:
+    InstallPath:
+      path: /opt/factorio
+    ExePath:
+      path: /opt/factorio/bin/x64/factorio
+
+Resources:
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !ImportValue MainVPC
+      AvailabilityZone: !Ref AzName
+      CidrBlock: !Ref SubnetCidrBlock
+      MapPublicIpOnLaunch: true
+  RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !ImportValue PublicRouteTable
+      SubnetId: !Ref Subnet
+  ACLAssoc:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !ImportValue FactorioNetworkACL
+      SubnetId: !Ref Subnet
+
+  Factorio:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref ImageId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      Monitoring: true
+      NetworkInterfaces:
+      - DeviceIndex: 0
+        AssociatePublicIpAddress: true
+        DeleteOnTermination: true
+        GroupSet: [ !ImportValue FactorioSecurityGroup ]
+        SubnetId: !Ref Subnet
+        Description: Network interface for a Factorio server
+      SourceDestCheck: true
+      Tenancy: default
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum install -y aws-cfn-bootstrap  # not really necessary with Amazon Linux AMIs, but the docs recommend it
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --region ${AWS::Region} --resource Factorio --configsets factorio
+          /opt/aws/bin/cfn-signal --stack ${AWS::StackName} --region ${AWS::Region} --resource Factorio --exit-code $?
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M   # Minutes, default 5
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          factorio:
+          - headless-factorio
+          - cfn-hup
+          - auto-yum-update
+          - set-timezone    # manually calls reboot, so must come after other config sets
+        headless-factorio:  # See https://wiki.factorio.com/Multiplayer#Setting_Up_a_Multiplayer_Game
+          packages:
+            yum:
+              curl: []
+          users:
+            factorio: {}  # Also creates the group
+          files:
+            /etc/systemd/system/factorio.service:
+              source: !Sub ${ScriptRepoUrl}/factorio.service
+              mode: 000777
+              owner: factorio
+              group: factorio
+            /tmp/factorio/add-server.sh:
+              source: !Sub ${ScriptRepoUrl}/scripts/add-server.sh
+              mode: 000777
+              owner: factorio
+              group: factorio
+            /tmp/factorio/create.sh:
+              source: !Sub ${ScriptRepoUrl}/scripts/create.sh
+              mode: 000777
+              owner: factorio
+              group: factorio
+            /tmp/factorio/start-server.sh:
+              source: !Sub ${ScriptRepoUrl}/scripts/start-server.sh
+              mode: 000777
+              owner: factorio
+              group: factorio
+          commands: # Commands are processed in alphabetical order, hence the leading numbers...
+            1_download-factorio:
+              command: !Sub
+                - |
+                  downloadUrl=https://www.factorio.com/get-download/${FactorioVersion}/headless/linux64   # Cannot use the cfn-init `sources` config section due to the redirect :/
+                  redirectUrl=$(curl $downloadUrl -s -L -I -o /dev/null -w '%{url_effective}')
+                  if [[ $redirectUrl == *"tar.xz"* ]]; then
+                      tarOptions="-xJv"
+                  else
+                      tarOptions="-xzv"
+                  fi
+                  if ! wget $downloadUrl -O - | tar $tarOptions --directory "/opt"; then
+                      echo "Install failed!"
+                      exit 1
+                  fi
+                  echo Factorio installed at '${InstallPath}'
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
+              test: !Sub
+                - test ! -e ${InstallPath}
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
+            2_add-servers-folder:
+              command: !Sub
+                - mkdir "${InstallPath}/servers"
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+              test: !Sub
+                - test ! -e "${InstallPath}/servers"
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+            3_add-add-server-script:
+              command: !Sub
+                - mv "/tmp/factorio/add-server" "${InstallPath}/scripts/add-server.sh"
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+            4_add-create-script:
+              command: !Sub
+                - mv "/tmp/factorio/create" "${InstallPath}/scripts/create.sh"
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+            5_add-start-server-scripts:
+              command: !Sub
+                - mv "/tmp/factorio/start-server" "${InstallPath}/scripts/start-server.sh"
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+            6_set-factorio-permissions:
+              command: !Sub
+                - |
+                  chown -R factorio:factorio ${InstallPath}
+                  echo factorio user is now owner of all files/folders under '${InstallPath}'
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+              test: !Sub
+                - test ! -e ${InstallPath}/status.txt
+                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+        cfn-hup:
+          packages:
+            yum:
+              aws-cfn-bootstrap: []
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                  interval=${CfnCheckFrequency}
+                  verbose=true
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/hooks.conf:
+              content: !Sub |
+                [reset-on-update]
+                triggers=post.update
+                path=Resources.Factorio.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --region ${AWS::Region} --resource Factorio --configsets factorio
+                runas=root
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - /etc/cfn/cfn-hup.conf
+                - /etc/cfn/hooks.conf
+                packages:
+                  yum: [ aws-cfn-bootstrap ]
+        auto-yum-update:
+          packages:
+            yum:
+              yum-cron: []
+              postfix: []
+              mailx: []
+          files:
+            /tmp/vicarel/factorio-yum-cron.sed:
+              content: !Sub |
+                s|update_messages.*|update_messages = yes|
+                s|download_updates.*|download_updates = yes|
+                s|apply_updates.*|apply_updates = no|
+                s|system_name.*|system_name = None|
+                s|emit_via.*|emit_via = email|
+                s|email_from.*|email_from = yum-cron@localhost|
+                s|email_to.*|email_to = ${YumUpdateEmail}|
+              mode: "000400"
+              owner: root
+              group: root
+          commands: # Commands are processed in alphabetical order, hence the leading numbers...
+            1_security-updates:
+              command: |
+                sed --file /tmp/vicarel/factorio-yum-cron.sed --in-place /etc/yum/yum-cron-hourly.conf
+                sed 's|update_cmd.*|update_cmd = security|' --in-place /etc/yum/yum-cron-hourly.conf
+                echo Hourly security updates configured
+            2_complete-updates:
+              command: |
+                sed --file /tmp/vicarel/factorio-yum-cron.sed --in-place /etc/yum/yum-cron.conf
+                echo Daily complete updates configured
+            3_restart-yum-cron:
+              command: service yum-cron restart
+            4_remove-sed-file:
+              command: rm /tmp/vicarel/factorio-yum-cron.sed
+          services:
+            sysvinit:
+              yum-cron:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum: [ yum-cron ]
+              postfix:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum: [ postfix ]
+        set-timezone:
+          commands:
+            set-timezone:
+              command: !Sub |
+                newZone=${TimeZone}
+                oldZone=$(date +%Z)
+                sed "s|ZONE.*|ZONE=\"$newZone\"|" --in-place /etc/sysconfig/clock
+                ln --symbolic --force /usr/share/zoneinfo/$newZone /etc/localtime
+                echo Time zone changed from \"$oldZone\" to \"$newZone\"
+                # reboot
+              test: !Sub |
+                timeZone=${TimeZone}
+                numChangedLines=$(cat /etc/sysconfig/clock | grep "^ZONE=\"$timeZone\"$" | wc --lines)
+                if [ $numChangedLines = 0 ] ; then
+                  echo Time zone will be changed to \"$timeZone\"
+                  exit 0
+                else
+                  echo Time zone is already \"$timeZone\"
+                  exit 1
+                fi
+
+Outputs:
+  FactorioServer:
+    Value: !GetAtt Factorio.PublicIp
+    Description: The public IP address of the new Factorio server

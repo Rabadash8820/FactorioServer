@@ -1,0 +1,12 @@
+[Unit]
+Description=Factorio Headless Server
+Documentation=https://https://wiki.factorio.com/Multiplayer
+AssertArchitecture=x86-64
+AssertPathIsDirectory=/opt/factorio
+
+[Service]
+Type=simple
+ExecStart=/opt/factorio/scripts/start-server
+Restart=on-failure
+User=factorio
+Group=factorio

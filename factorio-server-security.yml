@@ -1,0 +1,365 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Security group for Factorio servers
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Parameters:
+        - MainVPC
+        - NumIngressCidrBlocks
+        - IngressCidrBlocks
+
+Parameters:
+  MainVPC:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC in which to create the security groups and network ACL.
+    ConstraintDescription: must contain only alphanumeric characters and/or hyphens, and start with a letter
+  NumIngressCidrBlocks:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 5
+    Description: The number of CIDR blocks from which SSH requests into the Factorio server will be accepted. The actual CIDR blocks must be entered in the IngressCidrBlocks parameter.
+    ConstraintDescription: must be an integer between 1 and 5 (inclusive)
+  IngressCidrBlocks:
+    Type: CommaDelimitedList
+    Default: 0.0.0.0/0
+    Description: An array of CIDR blocks that are separated by commas.  These are the actual CIDR blocks from which SSH requests will be accepted.  Allowing SSH from ANY address (0.0.0.0/0) is strongly discouraged.  The total number of CIDR blocks should be one more than the total number of commas, and must match the number entered in NumIngressCidrBlocks.
+    ConstraintDescription: must be a comma-delimited list of valid CIDR blocks (e.g., 10.20.114.0/24), with no comma after the last item.
+
+Conditions:
+  SshIngressCidr5: !Equals [ !Ref NumIngressCidrBlocks, 5 ]
+  SshIngressCidr4: !Or [ !Equals [ !Ref NumIngressCidrBlocks, 4 ], !Condition SshIngressCidr5]
+  SshIngressCidr3: !Or [ !Equals [ !Ref NumIngressCidrBlocks, 3 ], !Condition SshIngressCidr4]
+  SshIngressCidr2: !Or [ !Equals [ !Ref NumIngressCidrBlocks, 2 ], !Condition SshIngressCidr3]
+  SshIngressCidr1: !Or [ !Equals [ !Ref NumIngressCidrBlocks, 1 ], !Condition SshIngressCidr2]
+
+Resources:
+
+  # Network ACL for the new public subnet(s)
+  FactorioACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref MainVPC
+  InEphemeralTcpAcl:  # For HTTPS connections (I think)
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 100
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 1024, To: 65535 }
+      CidrBlock: 0.0.0.0/0
+  InEphemeralUdpAcl:  # For Factorio client connections
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 101
+      Egress: false
+      RuleAction: allow
+      Protocol: 17
+      PortRange: { From: 1024, To: 65535 }
+      CidrBlock: 0.0.0.0/0
+  InFactorioAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 110
+      Egress: false
+      RuleAction: allow
+      Protocol: 17  # UDP
+      PortRange: { From: 34197, To: 34197 }
+      CidrBlock: 0.0.0.0/0
+  InIcmpAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 120
+      Egress: false
+      RuleAction: allow
+      Protocol: 1
+      Icmp: { Code: -1, Type: -1 }
+      CidrBlock: 0.0.0.0/0
+  InHttpAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 130
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      CidrBlock: 0.0.0.0/0
+      PortRange: { From: 80, To: 80 }
+  InHttpsAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 131
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      CidrBlock: 0.0.0.0/0
+      PortRange: { From: 443, To: 443 }
+  InNtpAcl:     # Both outbound and inbound ACL entries required
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 140
+      Egress: false
+      RuleAction: allow
+      Protocol: 17
+      CidrBlock: 0.0.0.0/0
+      PortRange: { From: 123, To: 123 }
+  OutEphemeralTcpAcl: # For HTTPS connections (I think)
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 100
+      Egress: true
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 1024, To: 65535 }
+      CidrBlock: 0.0.0.0/0
+  OutEphemeralUdpAcl: # For Factorio client connections
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 101
+      Egress: true
+      RuleAction: allow
+      Protocol: 17
+      PortRange: { From: 1024, To: 65535 }
+      CidrBlock: 0.0.0.0/0
+  OutFactorioAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 110
+      Egress: true
+      RuleAction: allow
+      Protocol: 17  # UDP
+      PortRange: { From: 34197, To: 34197 }
+      CidrBlock: 0.0.0.0/0
+  OutHttpAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 130
+      Egress: true
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 80, To: 80 }
+      CidrBlock: 0.0.0.0/0
+  OutHttpsAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 131
+      Egress: true
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 443, To: 443 }
+      CidrBlock: 0.0.0.0/0
+  OutNtpAcl:     # Both outbound and inbound ACL entries required
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 140
+      Egress: true
+      RuleAction: allow
+      Protocol: 17
+      CidrBlock: 0.0.0.0/0
+      PortRange: { From: 123, To: 123 }
+  OutSmtpAcl:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 150
+      Egress: true
+      RuleAction: allow
+      Protocol: 6
+      CidrBlock: 0.0.0.0/0
+      PortRange: { From: 25, To: 25 }
+
+  # SSH ingress ACL rules
+  InSshAcl1:
+    Condition: SshIngressCidr1
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 141
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 22, To: 22 }
+      CidrBlock: !Select [ 0, !Ref IngressCidrBlocks ]
+  InSshAcl2:
+    Condition: SshIngressCidr2
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 142
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 22, To: 22 }
+      CidrBlock: !Select [ 1, !Ref IngressCidrBlocks ]
+  InSshAcl3:
+    Condition: SshIngressCidr3
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 143
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 22, To: 22 }
+      CidrBlock: !Select [ 2, !Ref IngressCidrBlocks ]
+  InSshAcl4:
+    Condition: SshIngressCidr4
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 144
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 22, To: 22 }
+      CidrBlock: !Select [ 3, !Ref IngressCidrBlocks ]
+  InSshAcl5:
+    Condition: SshIngressCidr5
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref FactorioACL
+      RuleNumber: 145
+      Egress: false
+      RuleAction: allow
+      Protocol: 6
+      PortRange: { From: 22, To: 22 }
+      CidrBlock: !Select [ 4, !Ref IngressCidrBlocks ]
+
+  # Security Group for the Factorio servers
+  FactorioSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref MainVPC
+      # GroupName is unspecified because, according to the docs, "If you specify a name, you cannot perform updates that require replacement of this resource."
+      # Updating VpcId requires replacement, so by skipping this property, we allow our users to update the MainVPC parameter and everything will just work.
+      GroupDescription: Allow SSH traffic and boilerplate traffic for keeping the instance up-to-date, and of course Factorio client connections
+      SecurityGroupIngress:
+      -
+        Description: ICMP traffic from anywhere
+        IpProtocol: icmp
+        FromPort: -1
+        ToPort: -1
+        CidrIp: 0.0.0.0/0
+      -
+        Description: Factorio traffic from anywhere
+        IpProtocol: udp
+        FromPort: 34197
+        ToPort: 34197
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - 
+        Description: HTTP for automatic updates
+        IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - 
+        Description: HTTPS for cfn-init to describe resources in CloudFormation stacks
+        IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - 
+        Description: NTP to synchronize UTC time with a pool of public servers (only outbound rule required)
+        IpProtocol: udp
+        FromPort: 123
+        ToPort: 123
+        CidrIp: 0.0.0.0/0
+      - 
+        Description: SMTP to send cron output
+        IpProtocol: tcp
+        FromPort: 25
+        ToPort: 25
+        CidrIp: 0.0.0.0/0
+  IngressFromSameSgRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow ingress from anything using this same SecurityGroup
+      GroupId: !Ref FactorioSG
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref FactorioSG
+  EgressToSameSgRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow egress to anything using this same SecurityGroup
+      GroupId: !Ref FactorioSG
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref FactorioSG
+
+  # SSH ingress security group rules
+  SshIngressSgRule1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SshIngressCidr1
+    Properties:
+      Description: !Sub [ "SSH from ${CidrBlock}", { CidrBlock: !Select [ 0, !Ref IngressCidrBlocks ] } ]
+      GroupId: !Ref FactorioSG
+      CidrIp: !Select [ 0, !Ref IngressCidrBlocks ]
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+  SshIngressSgRule2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SshIngressCidr2
+    Properties:
+      Description: !Sub [ "SSH from ${CidrBlock}", { CidrBlock: !Select [ 1, !Ref IngressCidrBlocks ] } ]
+      GroupId: !Ref FactorioSG
+      CidrIp: !Select [ 1, !Ref IngressCidrBlocks ]
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+  SshIngressSgRule3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SshIngressCidr3
+    Properties:
+      Description: !Sub [ "SSH from ${CidrBlock}", { CidrBlock: !Select [ 2, !Ref IngressCidrBlocks ] } ]
+      GroupId: !Ref FactorioSG
+      CidrIp: !Select [ 2, !Ref IngressCidrBlocks ]
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+  SshIngressSgRule4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SshIngressCidr4
+    Properties:
+      Description: !Sub [ "SSH from ${CidrBlock}", { CidrBlock: !Select [ 3, !Ref IngressCidrBlocks ] } ]
+      GroupId: !Ref FactorioSG
+      CidrIp: !Select [ 3, !Ref IngressCidrBlocks ]
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+  SshIngressSgRule5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SshIngressCidr5
+    Properties:
+      Description: !Sub [ "SSH from ${CidrBlock}", { CidrBlock: !Select [ 4, !Ref IngressCidrBlocks ] } ]
+      GroupId: !Ref FactorioSG
+      CidrIp: !Select [ 4, !Ref IngressCidrBlocks ]
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+Outputs:
+  FactorioNetworkACL:
+    Value: !Ref FactorioACL
+    Export: { Name: FactorioNetworkACL }
+    Description: ID of the Factorio server network ACL
+  FactorioSecurityGroup:
+    Value: !Ref FactorioSG
+    Export: { Name: FactorioSecurityGroup }
+    Description: ID of the Factorio server security group
