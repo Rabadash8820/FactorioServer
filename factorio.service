@@ -7,6 +7,8 @@ AssertPathIsDirectory=/opt/factorio
 [Service]
 Type=simple
 ExecStart=/opt/factorio/scripts/start-server
+WorkingDirectory=/opt/factorio
 Restart=on-failure
-User=factorio
-Group=factorio
+
+[Install]
+WantedBy=multi-user.target

@@ -209,9 +209,9 @@ Resources:
           files:
             /etc/systemd/system/factorio.service:
               source: !Sub ${ScriptRepoUrl}/factorio.service
-              mode: 000777
-              owner: factorio
-              group: factorio
+              mode: 000644
+              owner: root
+              group: root
             /tmp/factorio/add-server.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/add-server.sh
               mode: 000777
