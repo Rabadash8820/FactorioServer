@@ -26,8 +26,24 @@ fi
     --map-settings "$serverPath/map-settings.json" \
     --server-settings "$serverPath/server-settings.json" \
     --server-id "$serverPath/server-id.json" \
-    --config "$serverPath/config.ini" \
     --mod-directory "$serverPath/mods" \
     $@
+if [ ! $? = 0 ]; then exit 1; fi
 
-echo "Created save file $serverPath/save.zip"
+# Move the new config file into the server directory, and tweak it
+cfgFile=$serverPath/config.ini
+mv "$installPath/config/config.ini" "$cfgFile"
+sed \
+  -e "s|read-data=.*|read-data=$installPath/data|" \
+  -e "s|write-data=.*|write-data=$serverPath/data|" \
+  --in-place $cfgFile
+if [ ! $? = 0 ]; then exit 1; fi
+
+# Clean up other auto-generated files
+mv "$installPath/achievements.dat" "$serverPath/achievements.dat"
+if [ ! -d "$serverPath/data" ]; then mkdir "$serverPath/data"; fi
+mv "$installPath/player-data.json" "$serverPath/data/player-data.json"
+rm "$installPath/factorio-current.log"
+rmdir "$installPath/temp"
+
+echo "Created save file at $serverPath/save.zip"
