@@ -22,6 +22,7 @@ Metadata:
           default: Factorio Server Software Configuration
         Parameters:
         - FactorioVersion
+        - ScriptRepoUrl
         - KeyPair
         - TimeZone
         - CfnCheckFrequency
@@ -218,17 +219,17 @@ Resources:
               mode: 000644
               owner: root
               group: root
-            /tmp/factorio/add-server.sh:
+            /tmp/factorio/scripts/add-server.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/add-server.sh
               mode: 000777
               owner: factorio
               group: factorio
-            /tmp/factorio/create.sh:
+            /tmp/factorio/scripts/create.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/create.sh
               mode: 000777
               owner: factorio
               group: factorio
-            /tmp/factorio/start-server.sh:
+            /tmp/factorio/scripts/start-server.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/start-server.sh
               mode: 000777
               owner: factorio
@@ -253,28 +254,21 @@ Resources:
               test: !Sub
                 - test ! -e ${InstallPath}
                 - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
-            2_add-servers-folder:
+            2_add-folders:
               command: !Sub
-                - mkdir "${InstallPath}/servers"
+                - mkdir "${InstallPath}/servers" "${InstallPath}/scripts"
                 - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
               test: !Sub
                 - test ! -e "${InstallPath}/servers"
                 - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
-            3_add-add-server-script:
+            3_add-scripts:
               command: !Sub
-                - mv "/tmp/factorio/add-server" "${InstallPath}/scripts/add-server.sh"
+                - mv --force "/tmp/factorio/scripts" "${InstallPath}"
                 - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
-            4_add-create-script:
-              command: !Sub
-                - mv "/tmp/factorio/create" "${InstallPath}/scripts/create.sh"
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
-            5_add-start-server-scripts:
-              command: !Sub
-                - mv "/tmp/factorio/start-server" "${InstallPath}/scripts/start-server.sh"
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
-            6_set-factorio-permissions:
+            4_set-factorio-permissions:
               command: !Sub
                 - |
+                  passwd -d factorio  # So admins can easily `sudo -u factorio` later without a password (e.g., when running scripts)
                   chown -R factorio:factorio ${InstallPath}
                   echo factorio user is now owner of all files/folders under '${InstallPath}'
                 - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
