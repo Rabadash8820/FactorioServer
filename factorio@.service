@@ -1,0 +1,17 @@
+[Unit]
+Description=%i - Factorio Headless Server
+Documentation=https://https://wiki.factorio.com/Multiplayer
+AssertArchitecture=x86-64
+AssertPathIsDirectory=/opt/factorio/servers/%i
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/factorio/servers/%i
+ExecStart=/opt/factorio/scripts/start-server.sh %i
+Restart=on-failure
+KillSignal=SIGINT
+User=factorio
+Group=factorio
+
+[Install]
+WantedBy=multi-user.target
