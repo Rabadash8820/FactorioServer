@@ -118,13 +118,6 @@ Parameters:
     Type: String
     Default: UTC
     Description: Name of a time zone data file in /usr/share/zoneinfo (for example "America/New_York").  Used to set the time zone for the Factorio servers.
-  CfnCheckFrequency:
-    Type: Number
-    Default: 60
-    MinValue: 1
-    MaxValue: 720 # 12 hours, from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-creationpolicy.html#cfn-attributes-creationpolicy-resourcesignal-timeout
-    Description: The frequency, in minutes, with which the cfn-hup script will check for updates to this CloudFormation template.
-    ConstraintDescription: must be between 1 and 720 minutes (12 hours), inclusive
   YumUpdateEmail:
     Type: String
     Default: admin@mycompany.com
@@ -204,7 +197,6 @@ Resources:
         configSets:
           factorio:
           - headless-factorio
-          - cfn-hup
           - auto-yum-update
           - set-timezone    # manually calls reboot, so must come after other config sets
         headless-factorio:  # See https://wiki.factorio.com/Multiplayer#Setting_Up_a_Multiplayer_Game
@@ -275,41 +267,6 @@ Resources:
               test: !Sub
                 - test ! -e ${InstallPath}/status.txt
                 - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
-        cfn-hup:
-          packages:
-            yum:
-              aws-cfn-bootstrap: []   # Empty array (or string), means latest version (see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html#aws-resource-init-packages-versions)
-          files:
-            /etc/cfn/cfn-hup.conf:
-              content: !Sub |
-                [main]
-                stack=${AWS::StackId}
-                region=${AWS::Region}
-                interval=${CfnCheckFrequency}
-                verbose=true
-              mode: 000400
-              owner: root
-              group: root
-            /etc/cfn/hooks.conf:
-              content: !Sub |
-                [reset-on-update]
-                triggers=post.update
-                path=Resources.Factorio.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --region ${AWS::Region} --resource Factorio --configsets factorio
-                runas=root
-              mode: 000400
-              owner: root
-              group: root
-          services:
-            sysvinit:
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files:
-                - /etc/cfn/cfn-hup.conf
-                - /etc/cfn/hooks.conf
-                packages:
-                  yum: [ aws-cfn-bootstrap ]
         auto-yum-update:
           packages:
             yum:
