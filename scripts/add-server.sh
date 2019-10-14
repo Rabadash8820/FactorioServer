@@ -27,6 +27,7 @@ cp "$installPath/data/map-settings.example.json" "$serverPath/map-settings.json"
 cp "$installPath/data/server-settings.example.json" "$serverPath/server-settings.json"
 cp "$installPath/data/server-whitelist.example.json" "$serverPath/server-whitelist.json"
 cp "$installPath/data/server-whitelist.example.json" "$serverPath/server-banlist.json"  # Copy whitelist b/c banlist is in same format
+cp "$installPath/data/server-whitelist.example.json" "$serverPath/server-adminlist.json"  # Copy whitelist b/c adminlist is in same format
 mkdir "$serverPath/mods" "$serverPath/data"
 
 echo "Server added at $serverPath"

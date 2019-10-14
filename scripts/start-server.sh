@@ -21,10 +21,12 @@ fi
 
 # Run the requested server
 "$installPath/bin/x64/factorio" \
+    --verbose \
     --start-server "$serverPath/save.zip" \
     --server-settings "$serverPath/server-settings.json" \
-    --server-banlist "$serverPath/server-banlist.json" \
+    --use-server-whitelist \
     --server-whitelist "$serverPath/server-whitelist.json" \
+    --server-adminlist "$serverPath/server-adminlist.json" \
     --server-id "$serverPath/server-id.json" \
     --config "$serverPath/config.ini" \
     --mod-directory "$serverPath/mods" \
