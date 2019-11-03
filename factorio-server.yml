@@ -127,17 +127,17 @@ Parameters:
     Description: Email to which notifications from automatic yum updates will be sent.  These notifications will only indicate that updates have been downloaded; the updates will still have to be installed manually.
   ScriptRepoUrl:
     Type: String
-    Default: "https://raw.githubusercontent.com/Rabadash8820/FactorioServer/<CommitSha>"
+    Default: "https://raw.githubusercontent.com/Rabadash8820/FactorioServer/master"
     MaxLength: 255
-    Description: "the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<commit>)"
-    ConstraintDescription: " must be the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<commit>)"
+    Description: "the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<branch-or-commit>)"
+    ConstraintDescription: " must be the URL of the service that hosts the raw Factorio scripts and config files (e.g., for GitHub: https://raw.githubusercontent.com/<username>/<repo>/<branch-or-commit>)"
 
 Mappings:
   FactorioConfig:
     InstallPath:
       path: /opt/factorio
-    ExePath:
-      path: /opt/factorio/bin/x64/factorio
+      parentPath: /opt
+      tmpPath: /tmp/factorio
   YumCronConfig:
     SedPath:
       path: /tmp/vicarel/factorio-yum-cron.sed
@@ -211,18 +211,34 @@ Resources:
               mode: 000644
               owner: root
               group: root
-            /tmp/factorio/scripts/add-server.sh:
+            /tmp/factorio-scripts/add-server.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/add-server.sh
               mode: 000777
               owner: factorio
               group: factorio
-            /tmp/factorio/scripts/create.sh:
+            /tmp/factorio-scripts/create.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/create.sh
               mode: 000777
               owner: factorio
               group: factorio
-            /tmp/factorio/scripts/start-server.sh:
+            /tmp/factorio-scripts/start-server.sh:
               source: !Sub ${ScriptRepoUrl}/scripts/start-server.sh
+              mode: 000777
+              owner: factorio
+              group: factorio
+            /tmp/factorio-scripts/update.sh:
+              content: !Sub |  # Have to provide this script's content in-place, since it contains template parameters
+                if [ ! $(whoami) = root ]; then
+                  echo "Please run this script as 'root' user or using 'sudo'."
+                  exit 1
+                fi
+                echo "Did you already stop any running Factorio servers?"
+                read -n 1 -s -r -p "If not, press Ctrl+C to cancel. Otherwise, press any key to continue."
+                echo "Beginning yum updates..."
+                yum update -y
+                echo "Checking for updates to CloudFormation stack..."
+                /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --region ${AWS::Region} --resource Factorio --configsets factorio
+                echo Updates complete! You may now restart Factorio servers
               mode: 000777
               owner: factorio
               group: factorio
@@ -232,41 +248,60 @@ Resources:
                 - |
                   downloadUrl=https://www.factorio.com/get-download/${FactorioVersion}/headless/linux64   # Cannot use the cfn-init `sources` config section due to the redirect :/
                   redirectUrl=$(curl $downloadUrl -s -L -I -o /dev/null -w '%{url_effective}')
+                  oldVer=`head -2 "${InstallPath}/data/changelog.txt" | tail -1 | cut -d " " -f 2`
                   if [[ $redirectUrl == *"tar.xz"* ]]; then
                       tarOptions="-xJv"
                   else
                       tarOptions="-xzv"
                   fi
-                  if ! wget $downloadUrl -O - | tar $tarOptions --directory "/opt"; then
-                      echo "Install failed!"
+
+                  if ! wget $downloadUrl -O - | tar $tarOptions --directory "/tmp"; then
+                      echo "Download failed!"
                       exit 1
                   fi
-                  echo Factorio installed at '${InstallPath}'
-                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
-              test: !Sub
-                - test ! -e ${InstallPath}
-                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
+
+                  newVer=`head -2 "${TmpPath}/data/changelog.txt" | tail -1 | cut -d " " -f 2`
+                  if [ "$newVer" != "$oldVer" ] ; then
+                    if [ "$oldVer" == "" ] ; then
+                      mv "${TmpPath}" "${InstallParentPath}"
+                      echo "Factorio v$newVer installed at '${InstallPath}'"
+                    else
+                      mv "${InstallPath}/servers" "${TmpPath}/servers"
+                      rm -rf "${InstallPath}"
+                      mv "${TmpPath}" "${InstallParentPath}"
+                      echo "Factorio v$newVer installed at '${InstallPath}' (was v$oldVer)"
+                    fi
+                  else
+                    rm -rf "${TmpPath}"
+                    echo "Factorio v$newVer already installed at '${InstallPath}'"
+                  fi
+                -
+                  InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
+                  InstallParentPath: !FindInMap [FactorioConfig, InstallPath, parentPath]
+                  TmpPath: !FindInMap [FactorioConfig, InstallPath, tmpPath]
             2_add-folders:
               command: !Sub
-                - mkdir "${InstallPath}/servers" "${InstallPath}/scripts"
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+                - mkdir "${InstallPath}/servers"
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
               test: !Sub
                 - test ! -e "${InstallPath}/servers"
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
             3_add-scripts:
               command: !Sub
-                - mv --force "/tmp/factorio/scripts" "${InstallPath}"
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+                - |
+                  rm -rf "${InstallPath}/scripts"
+                  mv "/tmp/factorio-scripts" "${InstallPath}/scripts"
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
             4_set-factorio-permissions:
               command: !Sub
                 - |
                   passwd -d factorio  # So admins can easily `sudo -u factorio` later without a password (e.g., when running scripts)
                   chown -R factorio:factorio ${InstallPath}
                   echo factorio user is now owner of all files/folders under '${InstallPath}'
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
               test: !Sub
                 - test ! -e ${InstallPath}/status.txt
-                - { InstallPath: !FindInMap [FactorioConfig, InstallPath, path] }
+                - InstallPath: !FindInMap [FactorioConfig, InstallPath, path]
         auto-yum-update:
           packages:
             yum:
